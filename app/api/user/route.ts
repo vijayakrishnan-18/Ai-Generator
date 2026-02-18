@@ -4,23 +4,48 @@ import { currentUser } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req:NextRequest) 
-{   
-    const user = await currentUser();
+export async function POST(req: NextRequest) {
+    try {
+        const user = await currentUser();
+        const email = user?.primaryEmailAddress?.emailAddress;
 
-    //if users already exist in DB
-    const users=await db.select().from(usersTable).where(eq(usersTable.email,user?.primaryEmailAddress?.emailAddress as string));
+        // 1. Authentication Guard
+        if (!email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-    //if users already exist in DB
-    if(users?.length==0)
-    {
-        const newUser=await db.insert(usersTable).values({
-            email:user?.primaryEmailAddress?.emailAddress as string,
-            name:user?.fullName as string,
-        }).returning();
+        const name = user?.fullName ?? user?.firstName ?? "User";
 
-        return NextResponse.json(newUser[0]);
+        // 2. Check for existing user
+        const existingUsers = await db.select()
+            .from(usersTable)
+            .where(eq(usersTable.email, email));
+
+        if (existingUsers.length === 0) {
+            // 3. Safe Insert with Conflict Handling
+            const [newUser] = await db.insert(usersTable)
+                .values({
+                    email: email,
+                    name: name,
+                })
+                .onConflictDoNothing({ target: usersTable.email })
+                .returning();
+
+            // 4. Handle edge case where conflict occurred between select and insert
+            if (!newUser) {
+                const [conflictUser] = await db.select()
+                    .from(usersTable)
+                    .where(eq(usersTable.email, email));
+                return NextResponse.json(conflictUser);
+            }
+
+            return NextResponse.json(newUser);
+        }
+
+        return NextResponse.json(existingUsers[0]);
+        
+    } catch (error) {
+        console.error("Internal Server Error:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
-
-    return NextResponse.json(users[0]);
 }
