@@ -5,6 +5,7 @@ import {
   ClerkProvider,
 } from '@clerk/nextjs'
 import Provider from "./provider";
+import { Toaster } from "sonner";
 const AppFont = DM_Sans({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Ai video Course Generator",
@@ -24,6 +25,7 @@ export default function RootLayout({
       >
         <Provider>
           {children}
+          <Toaster position="top-center" richColors/>
         </Provider>
       </body>
     </html>
